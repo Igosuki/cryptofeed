@@ -21,9 +21,9 @@ from cryptofeed.defines import EXX as EXX_str
 from cryptofeed.defines import FTX as FTX_str
 from cryptofeed.exchanges import *
 from cryptofeed.nbbo import NBBO
-from cryptofeed.feed import RestFeed
+from cryptofeed.feed import RestFeed, SignalRFeed
 from cryptofeed.exceptions import ExhaustedRetries
-
+from cryptofeed.signalr.events import ConnectEvent
 
 LOG = get_logger('feedhandler', 'feedhandler.log')
 
@@ -116,7 +116,9 @@ class FeedHandler:
             loop = asyncio.get_event_loop()
 
             for feed in self.feeds:
-                if isinstance(feed, RestFeed):
+                if isinstance(feed, SignalRFeed):
+                    loop.create_task(self._signalr_connect(feed))
+                elif isinstance(feed, RestFeed):
                     loop.create_task(self._rest_connect(feed))
                 else:
                     loop.create_task(self._connect(feed))
@@ -135,6 +137,9 @@ class FeedHandler:
                     await websocket.close()
                     break
             await asyncio.sleep(self.timeout_interval)
+
+    async def _signalr_connect(self, feed):
+        feed._start_main_thread()
 
     async def _rest_connect(self, feed):
         """

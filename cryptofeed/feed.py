@@ -78,6 +78,8 @@ class Feed:
     async def message_handler(self, msg: str, timestamp: float):
         raise NotImplementedError
 
+class SignalRFeed(Feed):
+    id = 'NotImplemented'
 
 class RestFeed(Feed):
     async def message_handler(self):

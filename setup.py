@@ -53,7 +53,8 @@ setup(
         "pyyaml",
         "aiohttp",
         "aiodns",
-        "cchardet"
+        "cchardet",
+        "signalr-client-aio==0.0.1.6.2"
     ],
     extras_require={
         'redis': ['aioredis'],
