@@ -7,6 +7,7 @@ associated with this software.
 from uuid import uuid4
 import json
 import logging
+import sys
 from decimal import Decimal
 from threading import Thread
 from queue import Queue
@@ -19,13 +20,17 @@ from websockets import ConnectionClosed
 from websockets.exceptions import InvalidStatusCode
 from signalr_aio import Connection
 from cryptofeed.signalr.events import *
+from cryptofeed.util.hash import *
 
 try:
     from cfscrape import create_scraper as Session
 except ImportError:
     from requests import Session
 
-LOG = logging.getLogger('feedhandler')
+LOG = logging.getLogger('bittrex')
+LOG.setLevel(logging.INFO)
+LOG.addHandler(logging.StreamHandler(sys.stdout))
+
 
 class BittrexConnection(object):
     def __init__(self, conn, hub):
@@ -68,7 +73,12 @@ class Bittrex(SignalRFeed):
     def __init__(self, pairs=None, channels=None, callbacks=None, **kwargs):
         self.url = BittrexParameters.URL
         self.threads = []
-        self._handle_connect()
+        self.control_queue = None
+        self.invokes = []
+        self.tickers = None
+        self.connection = None
+        self.threads = []
+        self.credentials = None
         super().__init__(
             '',
             pairs=pairs,
@@ -128,7 +138,7 @@ class Bittrex(SignalRFeed):
                 event = SubscribeEvent(BittrexMethods.AUTHENTICATE, self.credentials['api_key'], signature)
                 self.control_queue.put(event)
             else:
-                msg = await process_message(kwargs['R'])
+                msg = await decode_b64_message(kwargs['R'])
                 if msg is not None:
                     msg['invoke_type'] = invoke
                     msg['ticker'] = self.invokes[int(kwargs['I'])].get('ticker')
@@ -172,12 +182,51 @@ class Bittrex(SignalRFeed):
         # `QueryExchangeState`, `QuerySummaryState` and `GetAuthContext` are received in the debug channel.
         await self._is_query_invoke(kwargs)
 
+    def subscribe_to_exchange_deltas(self, tickers):
+        if type(tickers) is list:
+            invoke = BittrexMethods.SUBSCRIBE_TO_EXCHANGE_DELTAS
+            event = SubscribeEvent(invoke, tickers)
+            self.control_queue.put(event)
+        else:
+            raise TypeError(ErrorMessages.INVALID_TICKER_INPUT)
+
+    def subscribe_to_summary_deltas(self):
+        invoke = BittrexMethods.SUBSCRIBE_TO_SUMMARY_DELTAS
+        event = SubscribeEvent(invoke, None)
+        self.control_queue.put(event)
+
+    def subscribe_to_summary_lite_deltas(self):
+        invoke = BittrexMethods.SUBSCRIBE_TO_SUMMARY_LITE_DELTAS
+        event = SubscribeEvent(invoke, None)
+        self.control_queue.put(event)
+
+    def query_summary_state(self):
+        invoke = BittrexMethods.QUERY_SUMMARY_STATE
+        event = SubscribeEvent(invoke, None)
+        self.control_queue.put(event)
+
+    def query_exchange_state(self, tickers):
+        if type(tickers) is list:
+            invoke = BittrexMethods.QUERY_EXCHANGE_STATE
+            event = SubscribeEvent(invoke, tickers)
+            self.control_queue.put(event)
+        else:
+            raise TypeError(ErrorMessages.INVALID_TICKER_INPUT)
+
+    def authenticate(self, api_key, api_secret):
+        self.credentials = {'api_key': api_key, 'api_secret': api_secret}
+        event = SubscribeEvent(BittrexMethods.GET_AUTH_CONTENT, api_key)
+        self.control_queue.put(event)
+
+    def disconnect(self):
+        self.control_queue.put(CloseEvent())
+
     # =======================
     # Private Channel Methods
     # =======================
 
     async def _on_public(self, args):
-        msg = await process_message(args[0])
+        msg = await decode_b64_message(args[0])
         if 'D' in msg:
             if len(msg['D'][0]) > 3:
                 msg['invoke_type'] = BittrexMethods.SUBSCRIBE_TO_SUMMARY_DELTAS
@@ -188,7 +237,7 @@ class Bittrex(SignalRFeed):
         await self.on_public(msg)
 
     async def _on_private(self, args):
-        msg = await process_message(args[0])
+        msg = await decode_b64_message(args[0])
         await self.on_private(msg)
 
     # ======================
@@ -196,10 +245,18 @@ class Bittrex(SignalRFeed):
     # ======================
 
     async def on_public(self, msg):
-        pass
+        name = msg['M']
+        if name in self.pairs:
+            for cb in self.channel_for_method(msg['invoke_type']):
+                print(cb)
+                cb(msg)
 
     async def on_private(self, msg):
-        pass
+        name = msg['M']
+        if name in self.pairs:
+            for cb in self.channel_for_method(msg['invoke_type']):
+                print(cb)
+                cb(msg)
 
     async def on_error(self, args):
         LOG.error(args)
@@ -208,14 +265,31 @@ class Bittrex(SignalRFeed):
         msg = json.loads(msg, parse_float=Decimal)
         print(msg)
 
-    async def subscribe(self, websocket):
+    def channel_for_method(self, bittrex_channel):
+        for callback in self.callbacks if not self.config else self.config:
+            print(callback.upper())
+            if feed_to_exchange(BITTREX, callback) == bittrex_channel:
+                return self.callbacks[callback]
+        raise NotImplemented
+
+    def method_for_channel(self, channel):
+        if channel == BittrexMethods.SUBSCRIBE_TO_EXCHANGE_DELTAS:
+            return self.subscribe_to_exchange_deltas
+        elif channel == BittrexMethods.SUBSCRIBE_TO_SUMMARY_DELTAS:
+            return self.subscribe_to_summary_deltas
+        elif channel == BittrexMethods.SUBSCRIBE_TO_SUMMARY_LITE_DELTAS:
+            return self.subscribe_to_summary_lite_deltas
+        elif channel == BittrexMethods.QUERY_SUMMARY_STATE:
+            return self.query_summary_state
+        elif channel == BittrexMethods.QUERY_EXCHANGE_STATE:
+            return self.query_exchange_state
+        else:
+            raise NotImplemented
+
+    def subscribe(self):
+        LOG.info("start")
+        self._start_main_thread()
         for channel in self.channels if not self.config else self.config:
             for pair in self.pairs if not self.config else self.config[channel]:
-                await websocket.send(
-                    json.dumps({
-                        "event": "bts:subscribe",
-                        "data": {
-                            "channel": "{}_{}".format(channel, pair)
-                        }
-                    }))
+                self.method_for_channel(channel)(self.pairs)
 

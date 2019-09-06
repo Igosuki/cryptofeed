@@ -16,7 +16,7 @@ from websockets import ConnectionClosed
 
 from cryptofeed.defines import L2_BOOK
 from cryptofeed.log import get_logger
-from cryptofeed.defines import DERIBIT, BINANCE, GEMINI, HITBTC, BITFINEX, BITMEX, BITSTAMP, POLONIEX, COINBASE, KRAKEN, HUOBI, HUOBI_US, HUOBI_DM, OKCOIN, OKEX, COINBENE, BYBIT
+from cryptofeed.defines import DERIBIT, BINANCE, GEMINI, HITBTC, BITFINEX, BITMEX, BITSTAMP, POLONIEX, COINBASE, KRAKEN, HUOBI, HUOBI_US, HUOBI_DM, OKCOIN, OKEX, COINBENE, BYBIT, BITTREX
 from cryptofeed.defines import EXX as EXX_str
 from cryptofeed.defines import FTX as FTX_str
 from cryptofeed.exchanges import *
@@ -48,7 +48,8 @@ _EXCHANGES = {
     DERIBIT: Deribit,
     EXX_str: EXX,
     BYBIT: Bybit,
-    FTX_str: FTX
+    FTX_str: FTX,
+    BITTREX: Bittrex
 }
 
 
@@ -85,7 +86,7 @@ class FeedHandler:
                 self.last_msg[feed.uuid] = None
                 self.timeout[feed.uuid] = timeout
             else:
-                raise ValueError("Invalid feed specified")
+                raise ValueError("Invalid feed specified : {}".format(feed))
         else:
             self.feeds.append(feed)
             self.last_msg[feed.uuid] = None
@@ -139,7 +140,7 @@ class FeedHandler:
             await asyncio.sleep(self.timeout_interval)
 
     async def _signalr_connect(self, feed):
-        feed._start_main_thread()
+        feed.subscribe()
 
     async def _rest_connect(self, feed):
         """

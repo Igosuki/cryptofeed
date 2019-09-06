@@ -23,7 +23,7 @@ except:
 logger = logging.getLogger(__name__)
 
 
-async def process_message(message):
+async def decode_b64_message(message):
     try:
         deflated_msg = decompress(b64decode(message, validate=True), -MAX_WBITS)
     except SyntaxError:

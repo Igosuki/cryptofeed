@@ -19,7 +19,6 @@ from cryptofeed.defines import (L2_BOOK, L3_BOOK, TRADES, TICKER, VOLUME, FUNDIN
 from cryptofeed.pairs import gen_pairs
 from cryptofeed.exceptions import UnsupportedTradingPair, UnsupportedDataFeed, UnsupportedTradingOption
 
-
 LOG = logging.getLogger('feedhandler')
 
 
@@ -96,7 +95,7 @@ _feed_to_exchange_map = {
         BYBIT: 'order_book_25L1',
         FTX: 'orderbook',
         GEMINI: L2_BOOK,
-        BITTREX: ''
+        BITTREX: 'SubscribeToExchangeDeltas'
     },
     L3_BOOK: {
         BITFINEX: 'book-R0-F0-100',
@@ -117,7 +116,7 @@ _feed_to_exchange_map = {
         BYBIT: UNSUPPORTED,
         FTX: UNSUPPORTED,
         GEMINI: UNSUPPORTED,
-        BITTREX: ''
+        BITTREX: 'SubscribeToSummaryDeltas'
     },
     TRADES: {
         POLONIEX: TRADES,
@@ -140,7 +139,7 @@ _feed_to_exchange_map = {
         BYBIT:  'trade',
         FTX: 'trades',
         GEMINI: TRADES,
-        BITTREX: ''
+        BITTREX: 'SubscribeToSummaryDeltas'
     },
     TICKER: {
         POLONIEX: 1002,
@@ -162,7 +161,7 @@ _feed_to_exchange_map = {
         BYBIT: UNSUPPORTED,
         FTX: "ticker",
         GEMINI: UNSUPPORTED,
-        BITTREX: UNSUPPORTED
+        BITTREX: 'SubscribeToSummaryDeltas'
     },
     VOLUME: {
         POLONIEX: 1003
@@ -245,7 +244,10 @@ def feed_to_exchange(exchange, feed):
     if exchange == POLONIEX:
         if feed not in _feed_to_exchange_map:
             return pair_std_to_exchange(feed, POLONIEX)
-
+    print('exchange')    
+    print(exchange)    
+    print('feed')
+    print(feed)
     ret = _feed_to_exchange_map[feed][exchange]
     if ret == UNSUPPORTED:
         LOG.error(f"{feed} is not supported on {exchange}")
