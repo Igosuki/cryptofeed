@@ -74,7 +74,7 @@ class Bitstamp(Feed):
             for price, size, order_id in data[side + 's']:
                 price = Decimal(price)
                 size = Decimal(size)
-                book[side].get(price, sd())[order_id] = size
+                book[side].setdefault(price, sd()).update({order_id: size})
         self.l3_book[pair] = book
         await self.book_callback(self.l3_book[pair], L3_BOOK, pair, False, False, timestamp_normalize(self.id, timestamp))
 
